@@ -1,4 +1,6 @@
-import type { Cart, CartItem, Product } from '@checkout/contracts';
+import type { Cart, Product } from '@checkout/contracts';
+
+type CartItem = Cart['items'][number];
 
 export function indexById<T extends { id: string }>(items: readonly T[]): Map<string, T> {
   const map = new Map<string, T>();

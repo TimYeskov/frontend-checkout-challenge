@@ -1,6 +1,5 @@
 import type {
   Cart,
-  CartItem,
   CreateOrder,
   Customer,
   Delivery,
@@ -15,6 +14,8 @@ import { createClient } from '../http/client';
 import type { RequestSpec, SuccessPayload } from '../http/types';
 import { AppError } from '../http/errors';
 import { loadState, patchState } from '../persist/store';
+
+export type CartItem = Cart['items'][number];
 
 export type CheckoutOptions = {
   cart: Cart;
@@ -67,12 +68,7 @@ async function execute<T>(spec: RequestSpec, retried = false): Promise<SuccessPa
   try {
     return await client.execute<T>(spec);
   } catch (error) {
-    if (
-      !retried &&
-      spec.auth !== false &&
-      error instanceof AppError &&
-      error.status === 401
-    ) {
+    if (!retried && spec.auth !== false && error instanceof AppError && error.status === 401) {
       await createSession();
       return execute<T>(spec, true);
     }
@@ -160,7 +156,8 @@ export const api = {
       signal,
     }),
 
-  orders: (signal?: AbortSignal) => execute<Order[]>({ method: 'GET', path: '/api/orders', signal }),
+  orders: (signal?: AbortSignal) =>
+    execute<Order[]>({ method: 'GET', path: '/api/orders', signal }),
 
   order: (orderId: string, signal?: AbortSignal) =>
     execute<Order>({ method: 'GET', path: `/api/orders/${orderId}`, signal }),
@@ -189,4 +186,4 @@ export const api = {
     }),
 };
 
-export type { Cart, CartItem, CreateOrder, Customer, Delivery, Order, Payment, Product, Quote };
+export type { Cart, CreateOrder, Customer, Delivery, Order, Payment, Product, Quote };

@@ -17,6 +17,7 @@ export function prepareRequest(spec: RequestSpec, token: string | undefined): Pr
       body: spec.body === undefined ? undefined : JSON.stringify(spec.body),
       signal: spec.signal,
       cache: 'no-store',
+      credentials: 'omit',
     },
   };
 }

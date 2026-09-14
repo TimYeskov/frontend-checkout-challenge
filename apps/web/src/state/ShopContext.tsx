@@ -115,10 +115,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const productsById = useMemo(() => indexById(products), [products]);
   const qtyByProduct = useMemo(() => quantityByProduct(cart?.items ?? []), [cart]);
   const rows = useMemo(() => catalogRows(products, qtyByProduct), [products, qtyByProduct]);
-  const lines = useMemo(
-    () => (cart ? cartLines(cart, productsById) : []),
-    [cart, productsById],
-  );
+  const lines = useMemo(() => (cart ? cartLines(cart, productsById) : []), [cart, productsById]);
 
   const value = useMemo<ShopValue>(
     () => ({

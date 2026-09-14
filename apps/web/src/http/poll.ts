@@ -6,6 +6,7 @@ export type PollOptions<T> = {
   onValue: (value: T) => void;
   signal?: AbortSignal;
   intervalMs?: number;
+  initialDelayMs?: number;
 };
 
 function wait(ms: number, signal: AbortSignal): Promise<void> {
@@ -40,6 +41,7 @@ export async function pollUntil<T>(options: PollOptions<T>): Promise<T | undefin
   }
 
   try {
+    if (options.initialDelayMs) await wait(options.initialDelayMs, controller.signal);
     while (!controller.signal.aborted) {
       const result = await options.load(controller.signal);
       if (controller.signal.aborted) return undefined;

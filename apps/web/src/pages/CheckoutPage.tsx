@@ -1,15 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Quote } from '@checkout/contracts';
 import { api, type CheckoutOptions } from '../api/resources';
 import {
+  contactErrorsFromApi,
   customerFromDraft,
+  validateCustomer,
+  type ContactValues,
+} from '../domain/customer';
+import {
+  deliveryErrorsFromApi,
   deliveryFromDraft,
-  isValid,
-  validateDraft,
-  type FormErrors,
-} from '../domain/validation';
-import { fieldMap, isAbortError, toAppError, userMessage } from '../http';
+  isDeliveryReady,
+  sameDelivery,
+  validateDelivery,
+  type DeliveryValues,
+} from '../domain/delivery';
+import { isValid, validateDraft, type FormErrors } from '../domain/validation';
+import { isAbortError, toAppError, userMessage } from '../http';
 import {
   emptyDraft,
   loadState,
@@ -20,33 +28,15 @@ import {
 import { useShop } from '../state/ShopContext';
 import { Banner, StatusBlock } from '../ui/Banner';
 import { Button } from '../ui/Button';
-import { ChoiceGroup } from '../ui/ChoiceGroup';
-import { SelectField, TextField } from '../ui/Field';
+import { CustomerFields } from '../ui/CustomerFields';
+import { DeliveryFields } from '../ui/DeliveryFields';
 import { Money } from '../ui/Money';
+import { PaymentMethodFields } from '../ui/PaymentMethodFields';
 import { useAsyncAction } from '../ui/useAsyncAction';
-
-function sameDelivery(quote: Quote, draft: CheckoutDraft): boolean {
-  const next = deliveryFromDraft(draft);
-  if (quote.delivery.method !== next.method) return false;
-  if (next.method === 'pickup' && quote.delivery.method === 'pickup') {
-    return quote.delivery.pickupPointId === next.pickupPointId;
-  }
-  if (next.method === 'courier' && quote.delivery.method === 'courier') {
-    const left = quote.delivery.address;
-    const right = next.address;
-    return (
-      left.city === right.city &&
-      left.street === right.street &&
-      left.house === right.house &&
-      (left.apartment ?? '') === (right.apartment ?? '')
-    );
-  }
-  return false;
-}
 
 export function CheckoutPage() {
   const navigate = useNavigate();
-  const { cart, refresh } = useShop();
+  const { cart, loading, refresh } = useShop();
   const action = useAsyncAction();
   const [draft, setDraft] = useState<CheckoutDraft>(() => loadState().draft ?? emptyDraft());
   const [options, setOptions] = useState<CheckoutOptions | null>(null);
@@ -56,7 +46,9 @@ export function CheckoutPage() {
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const quoteGen = useRef(0);
   const quoteRef = useRef<Quote | null>(null);
+  const draftRef = useRef(draft);
   quoteRef.current = quote;
+  draftRef.current = draft;
 
   useEffect(() => {
     patchState({ draft });
@@ -75,39 +67,25 @@ export function CheckoutPage() {
     return () => controller.abort();
   }, []);
 
-  const pickupPoints = useMemo(() => {
-    const methods = options?.deliveryMethods;
-    if (!methods) return [];
-    for (let i = 0; i < methods.length; i++) {
-      if (methods[i].id === 'pickup') return methods[i].pickupPoints;
-    }
-    return [];
-  }, [options]);
-
   useEffect(() => {
     if (!cart || cart.items.length === 0) return;
-    const deliveryCheck = validateDraft({
-      ...draft,
-      name: 'Имя',
-      email: 'buyer@example.test',
-      phone: '+79990000000',
-    });
-    const deliveryReady =
-      draft.deliveryMethod === 'pickup'
-        ? !deliveryCheck.pickupPointId
-        : !deliveryCheck.city && !deliveryCheck.street && !deliveryCheck.house;
-    if (!deliveryReady) return;
+    if (!isDeliveryReady(draftRef.current)) {
+      quoteGen.current += 1;
+      if (quoteRef.current) setQuote(null);
+      return;
+    }
 
     const current = (quoteGen.current += 1);
-    const delay = draft.deliveryMethod === 'courier' ? 400 : 0;
+    const delay = draftRef.current.deliveryMethod === 'courier' ? 400 : 0;
     const timer = window.setTimeout(() => {
       void (async () => {
         const existing = quoteRef.current;
-        if (existing && existing.cartVersion === cart.version && sameDelivery(existing, draft)) {
+        const values = draftRef.current;
+        if (existing && existing.cartVersion === cart.version && sameDelivery(existing, values)) {
           return;
         }
         try {
-          const created = await api.createQuote(cart.version, deliveryFromDraft(draft));
+          const created = await api.createQuote(cart.version, deliveryFromDraft(values));
           if (current !== quoteGen.current) return;
           setQuote(created.data);
           setNotice(null);
@@ -127,7 +105,21 @@ export function CheckoutPage() {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [cart, draft, refresh, action]);
+  }, [
+    cart,
+    draft.deliveryMethod,
+    draft.pickupPointId,
+    draft.city,
+    draft.street,
+    draft.house,
+    draft.apartment,
+    refresh,
+    action.setError,
+  ]);
+
+  if (loading && !cart) {
+    return <Banner>Загружаем оформление…</Banner>;
+  }
 
   if (!cart || cart.items.length === 0) {
     return (
@@ -138,6 +130,28 @@ export function CheckoutPage() {
         </Link>
       </StatusBlock>
     );
+  }
+
+  function blurContact(field: keyof ContactValues) {
+    const message = validateCustomer(draft)[field];
+    setFieldErrors((current) => {
+      if (message) return { ...current, [field]: message };
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function blurDelivery(field: keyof DeliveryValues) {
+    const message = validateDelivery(draft)[field];
+    setFieldErrors((current) => {
+      if (message) return { ...current, [field]: message };
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
   }
 
   function update<K extends keyof CheckoutDraft>(key: K, value: CheckoutDraft[K]) {
@@ -203,17 +217,15 @@ export function CheckoutPage() {
           setNotice(userMessage(appError));
           return;
         }
-        setFieldErrors({ ...errors, ...fieldMap(appError) });
+        setFieldErrors({
+          ...errors,
+          ...contactErrorsFromApi(appError),
+          ...deliveryErrorsFromApi(appError),
+        });
         throw appError;
       }
     });
   }
-
-  const paymentOptions =
-    options?.paymentMethods.map((method) => ({
-      value: method.id,
-      title: method.title,
-    })) ?? [];
 
   return (
     <section>
@@ -235,120 +247,28 @@ export function CheckoutPage() {
         }}
         noValidate
       >
-        <fieldset className="card">
-          <legend>Покупатель</legend>
-          <TextField
-            id="name"
-            label="Имя"
-            autoComplete="name"
-            value={draft.name}
-            error={fieldErrors.name}
-            onChange={(event) => update('name', event.target.value)}
-            required
+        <div className="checkout-main">
+          <CustomerFields
+            values={draft}
+            errors={fieldErrors}
+            onChange={(field, value) => update(field, value)}
+            onBlurField={blurContact}
           />
-          <TextField
-            id="email"
-            label="Email"
-            type="email"
-            autoComplete="email"
-            value={draft.email}
-            error={fieldErrors.email}
-            onChange={(event) => update('email', event.target.value)}
-            required
+
+          <DeliveryFields
+            values={draft}
+            errors={fieldErrors}
+            methods={options?.deliveryMethods ?? []}
+            onChange={(field, value) => update(field, value)}
+            onBlurField={blurDelivery}
           />
-          <TextField
-            id="phone"
-            label="Телефон"
-            type="tel"
-            autoComplete="tel"
-            value={draft.phone}
-            error={fieldErrors.phone}
-            hint="Формат: +79990000000"
-            onChange={(event) => update('phone', event.target.value)}
-            required
+
+          <PaymentMethodFields
+            value={draft.paymentMethod}
+            methods={options?.paymentMethods ?? []}
+            onChange={(value) => update('paymentMethod', value)}
           />
-        </fieldset>
-
-        <ChoiceGroup
-          name="delivery"
-          legend="Доставка"
-          value={draft.deliveryMethod}
-          onChange={(value) => update('deliveryMethod', value)}
-          options={[
-            { value: 'pickup', title: 'Самовывоз', description: 'Бесплатно, пункт выдачи' },
-            { value: 'courier', title: 'Курьер', description: '390 ₽, бесплатно от 5 000 ₽' },
-          ]}
-        />
-
-        {draft.deliveryMethod === 'pickup' ? (
-          <SelectField
-            id="pickupPointId"
-            label="Пункт выдачи"
-            value={draft.pickupPointId}
-            error={fieldErrors.pickupPointId}
-            onChange={(event) => update('pickupPointId', event.target.value)}
-          >
-            {pickupPoints.map((point) => (
-              <option key={point.id} value={point.id}>
-                {point.title} — {point.address}
-              </option>
-            ))}
-          </SelectField>
-        ) : (
-          <fieldset className="card">
-            <legend>Адрес</legend>
-            <TextField
-              id="city"
-              label="Город"
-              autoComplete="address-level2"
-              value={draft.city}
-              error={fieldErrors.city}
-              onChange={(event) => update('city', event.target.value)}
-              required
-            />
-            <TextField
-              id="street"
-              label="Улица"
-              autoComplete="address-line1"
-              value={draft.street}
-              error={fieldErrors.street}
-              onChange={(event) => update('street', event.target.value)}
-              required
-            />
-            <div className="split">
-              <TextField
-                id="house"
-                label="Дом"
-                value={draft.house}
-                error={fieldErrors.house}
-                onChange={(event) => update('house', event.target.value)}
-                required
-              />
-              <TextField
-                id="apartment"
-                label="Квартира"
-                value={draft.apartment}
-                error={fieldErrors.apartment}
-                onChange={(event) => update('apartment', event.target.value)}
-              />
-            </div>
-          </fieldset>
-        )}
-
-        <ChoiceGroup
-          name="payment"
-          legend="Оплата"
-          value={draft.paymentMethod}
-          onChange={(value) => update('paymentMethod', value)}
-          options={
-            paymentOptions.length
-              ? paymentOptions
-              : [
-                  { value: 'card', title: 'Картой онлайн' },
-                  { value: 'cash_on_delivery', title: 'Наличными при получении' },
-                ]
-          }
-        />
+        </div>
 
         <aside className="summary card">
           <h2>Сумма</h2>
@@ -365,7 +285,11 @@ export function CheckoutPage() {
               </p>
             </>
           ) : (
-            <p className="muted">Сумма появится после выбора доставки.</p>
+            <p className="muted">
+              {draft.deliveryMethod === 'courier'
+                ? 'Укажите адрес — стоимость доставки пришлёт сервер.'
+                : 'Сумма появится после выбора доставки.'}
+            </p>
           )}
           <Button type="submit" pending={action.pending} disabled={!quote}>
             Подтвердить заказ

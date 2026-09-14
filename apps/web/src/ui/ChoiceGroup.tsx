@@ -18,7 +18,7 @@ export function ChoiceGroup<T extends string>({
   error,
 }: Props<T>) {
   return (
-    <fieldset className="choice-group">
+    <fieldset className="choice-group card">
       <legend>{legend}</legend>
       <div className="choice-list">
         {options.map((option) => {
