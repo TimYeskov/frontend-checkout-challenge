@@ -47,24 +47,28 @@ scripts/              проверки
 
 Проект использует npm workspaces. Зависимости фронтенда зафиксированы в корневом `package-lock.json`.
 
-## Решение: работа с API
+## Принятые решения
+
+### Работа с API
 
 Компоненты не вызывают `fetch` и не разбирают сырой `Response`. Все запросы идут через общий слой в `apps/web/src/http/`:
 
-| Часть      | Файл           | Ответственность                                                                   |
-| ---------- | -------------- | --------------------------------------------------------------------------------- |
-| Конфиг     | `config.ts`    | Базовый URL (`VITE_API_URL` или `http://127.0.0.1:4000`)                          |
-| Подготовка | `prepare.ts`   | URL, JSON-тело, `Authorization: Bearer`, `Idempotency-Key`, `credentials: 'omit'` |
-| Транспорт  | `transport.ts` | Один вызов `fetch`                                                                |
-| Разбор     | `parse.ts`     | Статус, пустое тело, envelope `data`, `Retry-After`, единый `AppError`            |
-| Клиент     | `client.ts`    | Сборка цепочки prepare → send → parse                                             |
-| Опрос      | `poll.ts`      | Общий цикл ожидания с abort, generation и `Retry-After`                           |
+| Часть | Файл | Ответственность |
+| --- | --- | --- |
+| Конфиг | `config.ts` | Базовый URL (`VITE_API_URL` или `http://127.0.0.1:4000`) |
+| Подготовка | `prepare.ts` | URL, JSON-тело, `Authorization: Bearer`, `Idempotency-Key`, `credentials: 'omit'` |
+| Транспорт | `transport.ts` | Один вызов `fetch` |
+| Разбор | `parse.ts` | Статус, пустое тело, envelope `data`, `Retry-After`, единый `AppError` |
+| Клиент | `client.ts` | Сборка цепочки prepare → send → parse |
+| Опрос | `poll.ts` | Общий цикл ожидания с abort, generation и `Retry-After` |
 
 Ресурсы API описаны в `apps/web/src/api/resources.ts`: страницы передают параметры операции и получают типизированные данные или уже разобранную ошибку. При `401` слой один раз обновляет сессию и повторяет запрос. Сессия, ключи идемпотентности и черновик формы хранятся в `localStorage` (`apps/web/src/persist/store.ts`).
 
 Доменные правила (контакты, доставка, статусы оплаты, деньги) живут в `apps/web/src/domain/` — одна реализация на правило, без копий в JSX.
 
-## Решение: обработка данных
+Стек: Vite + React 19 + TypeScript, workspace `@checkout/web`, типы из `@checkout/contracts`.
+
+### Обработка данных
 
 Частый участок — сборка строк каталога и корзины в `apps/web/src/domain/catalog.ts` + `ShopContext`.
 
