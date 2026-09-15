@@ -30,36 +30,47 @@ export function CatalogPage() {
         {rows.map((row) => {
           const busy = pendingId === row.product.id;
           return (
-            <li key={row.product.id} className="card">
-              <p className="sku">{row.product.sku}</p>
-              <h2>{row.product.title}</h2>
-              <p className="muted">{row.product.description}</p>
-              <p className="price">
-                <Money value={row.product.price} />
-              </p>
-              {row.available ? (
-                <p className="hint">В наличии: {row.product.stock} шт.</p>
-              ) : (
-                <p className="error">Нет в наличии</p>
-              )}
-              <Button
-                pending={busy}
-                disabled={
-                  !row.available || row.inCart >= row.product.stock || (pendingId !== null && !busy)
-                }
-                onClick={() => {
-                  void (async () => {
-                    setPendingId(row.product.id);
-                    try {
-                      await setQuantity(row.product.id, row.inCart + 1);
-                    } finally {
-                      setPendingId((current) => (current === row.product.id ? null : current));
-                    }
-                  })();
-                }}
-              >
-                {row.inCart ? `В корзине: ${row.inCart}` : 'В корзину'}
-              </Button>
+            <li key={row.product.id} className="product">
+              <div
+                className={`product-media product-media--${row.product.id}`}
+                aria-hidden="true"
+              />
+              <div className="product-body">
+                <div className="product-copy">
+                  <p className="sku">{row.product.sku}</p>
+                  <h2>{row.product.title}</h2>
+                  <p className="muted product-desc">{row.product.description}</p>
+                </div>
+                <div className="product-footer">
+                  <p className="price">
+                    <Money value={row.product.price} />
+                  </p>
+                  {row.available ? (
+                    <p className="hint">В наличии: {row.product.stock} шт.</p>
+                  ) : (
+                    <p className="error">Нет в наличии</p>
+                  )}
+                  <Button
+                    pending={busy}
+                    disabled={!row.available || row.inCart >= row.product.stock}
+                    onClick={() => {
+                      if (pendingId !== null) return;
+                      void (async () => {
+                        setPendingId(row.product.id);
+                        try {
+                          await setQuantity(row.product.id, row.inCart + 1);
+                        } finally {
+                          setPendingId((current) =>
+                            current === row.product.id ? null : current,
+                          );
+                        }
+                      })();
+                    }}
+                  >
+                    {row.inCart ? `В корзине: ${row.inCart}` : 'В корзину'}
+                  </Button>
+                </div>
+              </div>
             </li>
           );
         })}

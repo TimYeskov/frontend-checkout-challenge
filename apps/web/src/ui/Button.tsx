@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   pending?: boolean;
-  variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   children: ReactNode;
 };
 
@@ -17,11 +17,11 @@ export function Button({
   return (
     <button
       {...props}
-      className={`btn btn-${variant} ${className}`.trim()}
+      className={`btn btn-${variant} ${pending ? 'is-pending' : ''} ${className}`.trim()}
       disabled={disabled || pending}
       aria-busy={pending || undefined}
     >
-      {pending ? 'Подождите…' : children}
+      {children}
     </button>
   );
 }

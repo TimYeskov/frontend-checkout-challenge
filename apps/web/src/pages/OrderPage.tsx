@@ -109,7 +109,7 @@ function SuccessLayout({ order, children }: { order: Order; children: React.Reac
           Итого: <Money value={order.total} />
         </p>
       </div>
-      <Link className="btn btn-secondary" to="/">
+      <Link className="btn btn-secondary page-back" to="/">
         Вернуться в каталог
       </Link>
     </section>

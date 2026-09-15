@@ -8,11 +8,14 @@ export function Layout() {
   return (
     <div className="shell">
       <header className="topbar">
-        <NavLink to="/" className="brand">
+        <NavLink to="/" className="brand" end>
           Лавка
+          <span>учебный магазин</span>
         </NavLink>
         <nav>
-          <NavLink to="/">Каталог</NavLink>
+          <NavLink to="/" end>
+            Каталог
+          </NavLink>
           <NavLink to="/cart">
             Корзина{count ? <span className="badge">{count}</span> : null}
           </NavLink>
